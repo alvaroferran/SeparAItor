@@ -1,0 +1,8 @@
+**/__pycache__/**
+**/.vscode/**
+dataset/
+dataset_original/
+log_dir/
+save/
+utils/
+*.png

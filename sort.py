@@ -1,9 +1,9 @@
 from tensorflow.keras import optimizers
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense,\
-     Dropout
+from tensorflow.keras.layers import Flatten, Dense, Dropout
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
+from tensorflow.keras.applications import VGG16
 from libs.plot import plot_results
 import os
 import h5py
@@ -15,7 +15,7 @@ training_directory = "dataset/train/"
 validation_directory = "dataset/dev/"
 save_folder = "save"
 log_folder = "log_dir"
-epochs = 300
+epochs = 200
 learning_rate = 1e-4
 batch_size = 16
 cores_cpu = 12
@@ -62,27 +62,15 @@ nb_classes = train_generator.num_classes
 
 
 # Define and compile model
+conv_base = VGG16(weights='imagenet', include_top=False,
+                  input_shape=(*target_size, 3))
+conv_base.trainable = False
 model = Sequential()
-model.add(Conv2D(32, (3, 3), input_shape = (*target_size, 3),
-                 activation = 'relu'))
-model.add(Conv2D(32, (3, 3), activation='relu'))
-model.add(Dropout(0.5))
-model.add(MaxPooling2D((2, 2)))
-
-model.add(Conv2D(128, (3, 3), activation='relu'))
-model.add(Conv2D(128, (3, 3), activation='relu'))
-model.add(Dropout(0.5))
-model.add(MaxPooling2D((2, 2)))
-
-model.add(Conv2D(128, (3, 3), activation='relu'))
-model.add(Conv2D(128, (3, 3), activation='relu'))
-model.add(Dropout(0.5))
-model.add(MaxPooling2D((2, 2)))
-
+model.add(conv_base)
 model.add(Flatten())
 model.add(Dense(128, activation = 'relu'))
 model.add(Dropout(0.5))
-model.add(Dense(128, activation = 'relu'))
+model.add(Dense(256, activation = 'relu'))
 model.add(Dropout(0.5))
 model.add(Dense(nb_classes, activation = 'softmax'))
 
