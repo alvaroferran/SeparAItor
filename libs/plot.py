@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 
 
-def plot_results(history):
+def plot_results(history, iteration):
+    # Clear any old plot
+    plt.clf()
+
     # Plot loss
     history_dict = history.history
     loss_values = history_dict['loss']
@@ -13,8 +16,9 @@ def plot_results(history):
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig('loss.png')
-    
+    loss = "loss_fold" + str(iteration) + ".png"
+    plt.savefig(loss)
+
     # Plot accuracy
     plt.clf()
     acc_values = history_dict['accuracy']
@@ -25,4 +29,5 @@ def plot_results(history):
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')
     plt.legend()
-    plt.savefig('accuracy.png')
+    accuracy = "accuracy_fold" + str(iteration) + ".png"
+    plt.savefig(accuracy)
