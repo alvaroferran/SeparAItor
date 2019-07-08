@@ -6,10 +6,10 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import load_model
 
 
-checkpoint = "checkpoint-77-0.85.hdf5"
+checkpoint = "Fold 0-0.95.hdf5"
 folder = "dataset/test/"
 print_image_info = True
-image_size = 128
+image_size = 256
 
 # Find the number of files to convert
 numImagesTotal = 0
@@ -53,4 +53,4 @@ if print_image_info:
 nb_correctly_predicted = np.sum(real_class_list == predicted_class_list)
 correct_percentage = nb_correctly_predicted / nb_samples
 print(f"Correctly predicted {nb_correctly_predicted}/{nb_samples}",
-      f"({correct_percentage}%)")
+      f"({correct_percentage*100.0:.4f}%)")
