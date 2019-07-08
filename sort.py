@@ -7,36 +7,32 @@ import os
 import h5py
 import shutil
 import numpy as np
+import datetime
 
 
-target_size = (128, 128)
-source_dir = "dataset_original"
+target_size = (256, 256)
+source_dir = "dataset_256"
 dest_dir = "dataset"
-epochs = 200
-k_folds = 4
-learning_rate = 1e-4
-batch_size = 16
+epochs = 80
+k_folds = 10
+learning_rate = 1e-5
+batch_size = 32
 cores_cpu = 12
 training_directory = os.path.join(dest_dir, "train")
 validation_directory = os.path.join(dest_dir, "dev")
 save_folder = "save"
 log_folder = "log_dir"
+plot_folder = "imgs"
 
-# Create checkpoint and TensorBoard callbacks
-if not os.path.isdir(save_folder):
-    os.mkdir(save_folder)
-file_name = "checkpoint-{epoch:02d}-{val_accuracy:.2f}.hdf5"
-file_path = os.path.join(save_folder, file_name)
-checkpoint = ModelCheckpoint(file_path, monitor='val_accuracy', verbose=1,
-                             save_best_only=True, mode='max')
 
-if not os.path.isdir(log_folder):
-    os.mkdir(log_folder)
-tensor_board = TensorBoard(
-               log_dir=log_folder, histogram_freq=1, write_graph=True,
-               write_images=True)
-
-callbacks_list = [tensor_board]
+# Create folder to save plots
+dt = datetime.datetime.now()
+subdir = f"{dt.year}-{dt.month}-{dt.day}_{dt.hour}-{dt.minute}"
+plot_subdir = os.path.join(plot_folder, subdir)
+if not os.path.isdir(plot_folder):
+    os.mkdir(plot_folder)
+if not os.path.isdir(plot_subdir):
+    os.mkdir(plot_subdir)
 
 
 validation_scores = []
@@ -86,6 +82,22 @@ for k in range(k_folds):
     # Get model
     model = create_model(target_size, learning_rate, nb_classes)
 
+    # Create checkpoint and TensorBoard callbacks
+    if not os.path.isdir(save_folder):
+        os.mkdir(save_folder)
+    file_name = "Fold " + str(k) + "-{val_accuracy:.2f}.hdf5"
+    file_path = os.path.join(save_folder, file_name)
+    checkpoint = ModelCheckpoint(file_path, monitor='val_accuracy', verbose=1,
+                                 save_best_only=True, mode='max')
+
+    if not os.path.isdir(log_folder):
+        os.mkdir(log_folder)
+    tensor_board = TensorBoard(
+                log_dir=log_folder, histogram_freq=1, write_graph=True,
+                write_images=True)
+
+    callbacks_list = [tensor_board, checkpoint]
+
     # Train
     history = model.fit_generator(
         train_generator,
@@ -97,12 +109,11 @@ for k in range(k_folds):
         workers=cores_cpu)
 
     # Save loss and accuracy plots
-    plot_results(history, k)
+    plot_results(history, k, plot_subdir)
 
     # Get validation
     validation_score = model.evaluate_generator(validation_generator)
     validation_scores.append(validation_score)
 
-validation_average = np.average(validation_scores)
-print(f"Validation scores: {validation_scores}")
-print(f"Average: {validation_average}")
+validation_average = np.average(validation_scores, axis=0)
+print(f"Average loss and accuracy: {validation_average}")

@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
+import os
 
 
-def plot_results(history, iteration):
+def plot_results(history, iteration, directory):
     # Clear any old plot
     plt.clf()
 
@@ -17,7 +18,7 @@ def plot_results(history, iteration):
     plt.ylabel('Loss')
     plt.legend()
     loss = "loss_fold" + str(iteration) + ".png"
-    plt.savefig(loss)
+    plt.savefig(os.path.join(directory, loss))
 
     # Plot accuracy
     plt.clf()
@@ -30,4 +31,4 @@ def plot_results(history, iteration):
     plt.ylabel('Accuracy')
     plt.legend()
     accuracy = "accuracy_fold" + str(iteration) + ".png"
-    plt.savefig(accuracy)
+    plt.savefig(os.path.join(directory, accuracy))
