@@ -1,5 +1,18 @@
-import matplotlib.pyplot as plt
 import os
+import datetime
+import matplotlib.pyplot as plt
+plt.switch_backend('agg')
+
+
+def create_plot_directory(plot_dir):
+    dt = datetime.datetime.now()
+    subdir = f"{dt.year}-{dt.month}-{dt.day}_{dt.hour}-{dt.minute}"
+    plot_subdir = os.path.join(plot_dir, subdir)
+    if not os.path.isdir(plot_dir):
+        os.mkdir(plot_dir)
+    if not os.path.isdir(plot_subdir):
+        os.mkdir(plot_subdir)
+    return plot_subdir
 
 
 def plot_results(history, iteration, directory):

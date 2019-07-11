@@ -1,119 +1,77 @@
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
-from libs.plot import plot_results
-from libs.kfold_dataset import refresh_k_fold_dataset
-from libs.model import create_model
+#!/usr/bin/env python3
+
 import os
-import h5py
-import shutil
+import cv2
 import numpy as np
-import datetime
+from tensorflow.keras.models import load_model
 
 
-target_size = (256, 256)
-source_dir = "dataset_256"
-dest_dir = "dataset"
-epochs = 80
-k_folds = 10
-learning_rate = 1e-5
-batch_size = 32
-cores_cpu = 12
-training_directory = os.path.join(dest_dir, "train")
-validation_directory = os.path.join(dest_dir, "dev")
-save_folder = "save"
-log_folder = "log_dir"
-plot_folder = "imgs"
+def prepare_image(image):
+    # Rescale by 255, just like during training
+    image = np.array(image).astype('float32')/255
+    # Add extra dimension accounting for minibatch during training
+    image = np.expand_dims(image, axis=0)
+    return image
 
 
-# Create folder to save plots
-dt = datetime.datetime.now()
-subdir = f"{dt.year}-{dt.month}-{dt.day}_{dt.hour}-{dt.minute}"
-plot_subdir = os.path.join(plot_folder, subdir)
-if not os.path.isdir(plot_folder):
-    os.mkdir(plot_folder)
-if not os.path.isdir(plot_subdir):
-    os.mkdir(plot_subdir)
+save_dir = os.path.join("CNN", "save")
+saved_model = os.path.join(save_dir, "Fold 0-0.95.hdf5")
+image_size = (256, 256)
+
+# Get labels
+train_dir = os.path.join("CNN", os.path.join("dataset", "train"))
+labels = os.listdir(train_dir)
+
+# Load trained model
+model = load_model(saved_model)
+model.summary()
+
+print(labels)
+labels.sort()
+print(labels)
+
+try:
+    # Input video stream
+    vid = cv2.VideoCapture(0)
+    if not vid.isOpened():
+        raise IOError("Couldn't open webcam or video") 
+    video_size = (int(vid.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                  int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))) 
+
+    # # Output stream to save the video output
+    # if config["save_video"]:
+    #     video_name = config["output_name"] + ".mp4"
+    #     video_fps = config["output_fps"]
+    #     video_fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    #    out = cv2.VideoWriter(video_name, video_fourcc, video_fps, video_size)
+
+    while True:
+        return_value, frame = vid.read()
+        # image = Image.fromarray(frame)
+        image = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
+        # image = np.asarray(image)
 
 
-validation_scores = []
-for k in range(k_folds):
+        # Show yolo stream
+        # if config["show_stream"]:
+        cv2.namedWindow("image", cv2.WINDOW_NORMAL)
+        cv2.imshow("image", image)
 
-    # Clear old tensoboard logs
-    log_train = os.path.join(log_folder, "train")
-    log_validation = os.path.join(log_folder, "validation")
-    if os.path.isdir(log_train):
-        shutil.rmtree(log_train)
-    if os.path.isdir(log_validation):
-        shutil.rmtree(log_validation)
+        if cv2.waitKey(1) & 0xFF == ord('a'):
+            image = prepare_image(image)
+            # predicted = model.predict_classes(image)
+            predictions = model.predict(image)
+            predicted = np.argmax(predictions[0], axis=0)
+            print(predictions)
+            print(labels[predicted])
 
-    # Rebuild dataset directories
-    refresh_k_fold_dataset(source_dir, dest_dir, k_folds)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        # # Save frame to output video
+        # if config["save_video"]:
+        #     out.write(image)
 
-    # Create train and dev datasets
-    train_datagen = ImageDataGenerator(
-        rescale=1./255,
-        rotation_range=360,
-        brightness_range=[1.5, 0.5],
-        width_shift_range=0.2,
-        height_shift_range=0.2,
-        shear_range=0.2,
-        zoom_range=0.5,
-        horizontal_flip=True,
-        vertical_flip=True)
-
-    train_generator = train_datagen.flow_from_directory(
-        training_directory,
-        target_size=target_size,
-        batch_size=batch_size,
-        class_mode='categorical')
-
-    val_datagen = ImageDataGenerator(rescale=1./255)
-
-    validation_generator = val_datagen.flow_from_directory(
-        validation_directory,
-        target_size=target_size,
-        batch_size=batch_size,
-        class_mode='categorical')
-
-    nb_train_samples = train_generator.n
-    nb_validation_samples = validation_generator.n
-    nb_classes = train_generator.num_classes
-
-    # Get model
-    model = create_model(target_size, learning_rate, nb_classes)
-
-    # Create checkpoint and TensorBoard callbacks
-    if not os.path.isdir(save_folder):
-        os.mkdir(save_folder)
-    file_name = "Fold " + str(k) + "-{val_accuracy:.2f}.hdf5"
-    file_path = os.path.join(save_folder, file_name)
-    checkpoint = ModelCheckpoint(file_path, monitor='val_accuracy', verbose=1,
-                                 save_best_only=True, mode='max')
-
-    if not os.path.isdir(log_folder):
-        os.mkdir(log_folder)
-    tensor_board = TensorBoard(
-                log_dir=log_folder, histogram_freq=1, write_graph=True,
-                write_images=True)
-
-    callbacks_list = [tensor_board, checkpoint]
-
-    # Train
-    history = model.fit_generator(
-        train_generator,
-        epochs=epochs,
-        steps_per_epoch=nb_train_samples // batch_size,
-        validation_data=validation_generator,
-        validation_steps=nb_validation_samples // batch_size,
-        callbacks=callbacks_list,
-        workers=cores_cpu)
-
-    # Save loss and accuracy plots
-    plot_results(history, k, plot_subdir)
-
-    # Get validation
-    validation_score = model.evaluate_generator(validation_generator)
-    validation_scores.append(validation_score)
-
-validation_average = np.average(validation_scores, axis=0)
-print(f"Average loss and accuracy: {validation_average}")
+finally:
+    vid.release()
+    cv2.destroyAllWindows()
+    # cv2.destroyWindows("image")

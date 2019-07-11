@@ -4,7 +4,7 @@ import shutil
 import random
 
 
-def refresh_k_fold_dataset(source, dest, nb_folds, dev_train_set_percent=90,
+def refresh_k_fold_dataset(source, dest, nb_folds, k, dev_train_set_percent=90,
                            verbose=True):
 
     '''
@@ -43,6 +43,7 @@ def refresh_k_fold_dataset(source, dest, nb_folds, dev_train_set_percent=90,
         dest: Output directory to be created containig the sorted
             sets.
         nb_folds: Number of folds
+        k: Current iteration
         dev_train_set_percent: Percentage of files to be sorted into the
             "dev_train" set which will be used for the validation and trainig
             sets. The rest is used as test files. This is set to 90 by default.
@@ -51,15 +52,6 @@ def refresh_k_fold_dataset(source, dest, nb_folds, dev_train_set_percent=90,
     '''
 
     sets = ["test", "dev", "train"]
-
-    if not hasattr(refresh_k_fold_dataset, "iteration"):
-        refresh_k_fold_dataset.iteration = 0
-        # Create dest directory
-        create_dir(dest)
-        # Create sets with the correct folder structure
-        for set_name in sets:
-            dest_sub_dir = os.path.join(dest, set_name)
-            shutil.copytree(source, dest_sub_dir, copy_function=ignoreFiles)
 
     # Calculate percentages
     test_set_percent = 100 - dev_train_set_percent
@@ -83,7 +75,7 @@ def refresh_k_fold_dataset(source, dest, nb_folds, dev_train_set_percent=90,
             nb_images_dev = nb_images_class * dev_set_percent // 100
             images_test = images[-nb_images_test:]
             images_dev_train = images[:(nb_images_class-nb_images_test)]
-            dev_start = nb_images_dev * refresh_k_fold_dataset.iteration
+            dev_start = nb_images_dev * k
             images_dev = images_dev_train[dev_start:dev_start+nb_images_dev]
             images_train = [i for i in images_dev_train if i not in images_dev]
             image_sets = {"test": images_test,
@@ -113,13 +105,22 @@ def refresh_k_fold_dataset(source, dest, nb_folds, dev_train_set_percent=90,
                     # Print progress info
                     num_images_processed += 1
                     if verbose:
-                        print_progress(refresh_k_fold_dataset.iteration,
-                                       num_images_processed, num_images_total)
+                        print_progress(k, num_images_processed,
+                                       num_images_total)
 
         num_dirs_walked += 1
     if verbose:
         print("")
-    refresh_k_fold_dataset.iteration += 1
+
+
+def create_dataset_structure(source_dir, dest_dir):
+    sets = ["test", "dev", "train"]
+    # Create dest directory
+    create_dir(dest_dir)
+    # Create sets with the correct folder structure
+    for set_name in sets:
+        dest_sub_dir = os.path.join(dest_dir, set_name)
+        shutil.copytree(source_dir, dest_sub_dir, copy_function=ignoreFiles)
 
 
 def ignoreFiles(_, __): pass
