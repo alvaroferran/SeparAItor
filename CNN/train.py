@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
-from tensorflow.keras import backend as K
 from libs.plot import plot_results, create_plot_directory
 from libs.kfold_dataset import refresh_k_fold_dataset, create_dataset_structure
 from libs.model import create_model
@@ -17,7 +16,6 @@ def train_model(k, plot_dir, output):
 
     with open("config.yml", 'r') as ymlfile:
         params = yaml.load(ymlfile)
-
     source_dir = params["source_dir"]
     dest_dir = params["dest_dir"]
     save_dir = params["save_dir"]
@@ -32,9 +30,6 @@ def train_model(k, plot_dir, output):
     enable_tensorboard = params["enable_tensorboard"]
     enable_plots = params["enable_plots"]
     enable_dynamic_allocation = params["enable_dynamic_allocation"]
-
-    training_directory = os.path.join(dest_dir, "train")
-    validation_directory = os.path.join(dest_dir, "dev")
 
     # Dynamically allocate GPU memory
     if enable_dynamic_allocation:
@@ -65,6 +60,7 @@ def train_model(k, plot_dir, output):
         horizontal_flip=True,
         vertical_flip=True)
 
+    training_directory = os.path.join(dest_dir, "train")
     train_generator = train_datagen.flow_from_directory(
         training_directory,
         target_size=target_size,
@@ -73,6 +69,7 @@ def train_model(k, plot_dir, output):
 
     val_datagen = ImageDataGenerator(rescale=1./255)
 
+    validation_directory = os.path.join(dest_dir, "dev")
     validation_generator = val_datagen.flow_from_directory(
         validation_directory,
         target_size=target_size,
@@ -133,7 +130,6 @@ if __name__ == '__main__':
 
     with open("config.yml", 'r') as ymlfile:
         params = yaml.load(ymlfile)
-
     source_dir = params["source_dir"]
     dest_dir = params["dest_dir"]
     plot_dir = params["plot_dir"]
