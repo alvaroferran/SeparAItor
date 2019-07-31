@@ -4,6 +4,7 @@ import os
 import cv2
 import numpy as np
 from tensorflow.keras.models import load_model
+from time import sleep
 
 
 def prepare_image(image):
@@ -43,10 +44,10 @@ def draw_text(image, text):
 
 
 save_dir = os.path.join("CNN", "save")
-saved_model = os.path.join(save_dir, "Fold0-0.9812.hdf5")
+model_path = os.path.join(save_dir, "Fold0-0.9812.hdf5")
 image_size = (256, 256)
 mask_threshold = 1.e-3
-stabilization_iterations = 5
+stabilization_iterations = 3
 prediction_iterations = 5
 
 # Get labels
@@ -56,7 +57,7 @@ labels.sort()
 print(labels)
 
 # Load trained model
-model = load_model(saved_model)
+model = load_model(model_path)
 model.summary()
 
 try:
@@ -68,6 +69,10 @@ try:
     subtractor = cv2.createBackgroundSubtractorMOG2(history=10,
                                                     varThreshold=50)
 
+    # # First frame for background
+    _, frame = vid.read()
+    background = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
+
     motion_list = [True] * stabilization_iterations
     image_stable = False
     moved_prev = False
@@ -76,10 +81,32 @@ try:
         return_value, frame = vid.read()
 
         image = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
-        mask = subtractor.apply(image)
+        motion_mask = subtractor.apply(image)
+
+        # Background subtraction
+        diff = cv2.absdiff(background, image)
+        diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+        diff = cv2.GaussianBlur(diff, (21, 21), 0)
+        back_mask = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)[1]
+        foreground_black = cv2.bitwise_and(image, image, mask=back_mask)
+
+        foreground_white = np.zeros_like(foreground_black, np.uint8)
+        foreground_white.fill(255)
+        non_black_pixels = foreground_black > 1
+        foreground_white[non_black_pixels] = foreground_black[non_black_pixels]
+
+        # Show stream
+        cv2.imshow("Camera Feed", image)
+        cv2.moveWindow("Camera Feed", 0, 0)
+        cv2.imshow("Movement", motion_mask)
+        cv2.moveWindow("Movement", 0, 380)
+        cv2.imshow("Background", back_mask)
+        cv2.moveWindow("Background", 400, 380)
+        cv2.imshow("Foreground", foreground_white)
+        cv2.moveWindow("Foreground", 400, 0)
 
         # Check if object has moved in the last x frames
-        motion_detected = detect_motion(mask)
+        motion_detected = detect_motion(motion_mask)
         motion_list.pop(0)
         motion_list.append(motion_detected)
         if True not in motion_list:
@@ -91,7 +118,8 @@ try:
         # Check for trigger falling edge (wait for object to stabilize)
         if moved_prev and image_stable:
             predictions = []
-            preprocessed_image = prepare_image(image)
+            # preprocessed_image = prepare_image(image)
+            preprocessed_image = prepare_image(foreground_white)
             for i in range(prediction_iterations):
                 preds = model.predict(preprocessed_image)
                 preds = np.argmax(preds[0], axis=0)
@@ -101,10 +129,9 @@ try:
             if prediction != "empty":
                 print(prediction)
             moved_prev = False
-
-        # Show stream
-        cv2.imshow("image", image)
-        cv2.imshow("mask", mask)
+            _, frame = vid.read()
+            background = cv2.resize(frame, image_size,
+                                    interpolation=cv2.INTER_AREA)
 
         # Quit
         if cv2.waitKey(1) & 0xFF == ord('q'):
