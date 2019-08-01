@@ -4,6 +4,7 @@ import os
 import cv2
 import numpy as np
 from tensorflow.keras.models import load_model
+import serial
 from time import sleep
 
 
@@ -43,12 +44,45 @@ def draw_text(image, text):
     return image
 
 
+def get_background_mask(image, background):
+    diff = cv2.absdiff(background, image)
+    diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+    diff = cv2.GaussianBlur(diff, (21, 21), 0)
+    return cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)[1]
+
+
+def get_foreground(image, back_mask):
+    foreground_black = cv2.bitwise_and(image, image, mask=back_mask)
+    foreground_white = np.zeros_like(foreground_black, np.uint8)
+    foreground_white.fill(255)
+    non_black_pixels = foreground_black > 1
+    foreground_white[non_black_pixels] = foreground_black[non_black_pixels]
+    return foreground_white
+
+
+def sort(item):
+    PMD = ["plastic", "cans", "cartons"]
+    organic = ["eggs"]
+    glass = ["glass"]
+    classes = [PMD, organic, glass]
+    for class_item in classes:
+        if item in class_item:
+            return classes.index(class_item)
+    return None
+
+
+def send_data(bt, sorted_class):
+    data = str(sorted_class) + "\n"
+    bt.write(data.encode())
+    bt.flush()
+
+
 save_dir = os.path.join("CNN", "save")
-model_path = os.path.join(save_dir, "Fold0-0.9812.hdf5")
+model_path = os.path.join(save_dir, "Fold0-0.9444.hdf5")
 image_size = (256, 256)
 mask_threshold = 1.e-3
-stabilization_iterations = 3
-prediction_iterations = 5
+stabilization_iterations = 10
+prediction_iterations = 3
 
 # Get labels
 train_dir = os.path.join("CNN", os.path.join("dataset", "train"))
@@ -60,6 +94,15 @@ print(labels)
 model = load_model(model_path)
 model.summary()
 
+# Connect to base
+bt = serial.Serial('/dev/rfcomm0', 19200)
+while True:
+    in_data = bt.read_until().decode()
+    if in_data[:-2] == "a":
+        bt.write("b".encode())
+        break
+print("Connected!")
+
 try:
     # Input video stream
     vid = cv2.VideoCapture(0)
@@ -67,33 +110,33 @@ try:
         raise IOError("Couldn't open webcam or video")
 
     subtractor = cv2.createBackgroundSubtractorMOG2(history=10,
-                                                    varThreshold=50)
+                                                    varThreshold=100)
 
-    # # First frame for background
+    # First frame for background
     _, frame = vid.read()
     background = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
 
     motion_list = [True] * stabilization_iterations
     image_stable = False
-    moved_prev = False
+    moved_prev = True
+    waiting_confirmation_base = False
+
+    s = {
+        "waiting_object": 0,
+        "waiting_base": 1
+        }
+
+    state = s["waiting_object"]
 
     while True:
         return_value, frame = vid.read()
-
         image = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
+        # Motion subtraction
         motion_mask = subtractor.apply(image)
-
         # Background subtraction
-        diff = cv2.absdiff(background, image)
-        diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-        diff = cv2.GaussianBlur(diff, (21, 21), 0)
-        back_mask = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)[1]
-        foreground_black = cv2.bitwise_and(image, image, mask=back_mask)
-
-        foreground_white = np.zeros_like(foreground_black, np.uint8)
-        foreground_white.fill(255)
-        non_black_pixels = foreground_black > 1
-        foreground_white[non_black_pixels] = foreground_black[non_black_pixels]
+        back_mask = get_background_mask(image, background)
+        # Change black background to white
+        foreground_white = get_foreground(image, back_mask)
 
         # Show stream
         cv2.imshow("Camera Feed", image)
@@ -105,7 +148,7 @@ try:
         cv2.imshow("Foreground", foreground_white)
         cv2.moveWindow("Foreground", 400, 0)
 
-        # Check if object has moved in the last x frames
+        # Check if object has moved in the last few frames
         motion_detected = detect_motion(motion_mask)
         motion_list.pop(0)
         motion_list.append(motion_detected)
@@ -115,23 +158,43 @@ try:
             image_stable = False
             moved_prev = True
 
-        # Check for trigger falling edge (wait for object to stabilize)
-        if moved_prev and image_stable:
-            predictions = []
-            # preprocessed_image = prepare_image(image)
-            preprocessed_image = prepare_image(foreground_white)
-            for i in range(prediction_iterations):
-                preds = model.predict(preprocessed_image)
-                preds = np.argmax(preds[0], axis=0)
-                predictions.append(preds)
-            prediction = get_most_frequent(predictions)
-            prediction = labels[prediction]
-            if prediction != "empty":
-                print(prediction)
-            moved_prev = False
-            _, frame = vid.read()
-            background = cv2.resize(frame, image_size,
-                                    interpolation=cv2.INTER_AREA)
+        # Check for trigger falling edge (wait for image to stabilize)
+        if image_stable and moved_prev:
+
+            # Check for new object and predict
+            if state == s["waiting_object"]:
+                preprocessed_image = prepare_image(foreground_white)
+                predictions = []
+                # Predict image class
+                for i in range(prediction_iterations):
+                    preds = model.predict(preprocessed_image)
+                    preds = np.argmax(preds[0], axis=0)
+                    predictions.append(preds)
+                prediction = get_most_frequent(predictions)
+                prediction = labels[prediction]
+                if prediction != "empty":
+                    print(prediction)
+                    sorted_class = sort(prediction)
+                    if sorted_class is not None:
+                        # Go to corresponding bin
+                        send_data(bt, sorted_class)
+                        # waiting_confirmation_base = True
+                        moved_prev = False
+                        state = s["waiting_base"]
+
+            # Wait for base to return to position
+            elif state == s["waiting_base"]:
+                in_data = bt.read_until().decode()
+                if in_data[:-2] == "a":
+                    bt.write("b".encode())
+                    waiting_confirmation_base = False
+                    # Refresh background image
+                    _, frame = vid.read()
+                    background = cv2.resize(frame, image_size,
+                                            interpolation=cv2.INTER_AREA)
+                    moved_prev = False
+                    state = s["waiting_object"]
+                    print("Ready for new object")
 
         # Quit
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -141,3 +204,4 @@ try:
 finally:
     vid.release()
     cv2.destroyAllWindows()
+    bt.close()
