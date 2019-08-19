@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from tensorflow.keras.models import load_model
 from libs.serial_comms import connect_serial, send_data
-from libs.image import prepare_image, get_background_mask, get_foreground
+from libs.image import prepare_image, get_foreground
 from libs.actions import get_most_frequent, detect_motion, sort_item
 
 
@@ -21,6 +21,11 @@ labels = os.listdir(train_dir)
 labels.sort()
 print(labels)
 
+# Input video stream (open early to let the camera warm up while model loads)
+vid = cv2.VideoCapture(0)
+if not vid.isOpened():
+    raise IOError("Couldn't open webcam or video")
+
 # Load trained model
 model = load_model(model_path)
 model.summary()
@@ -30,11 +35,6 @@ bt = connect_serial('/dev/rfcomm0', 19200)
 print("Connected!")
 
 try:
-    # Input video stream
-    vid = cv2.VideoCapture(0)
-    if not vid.isOpened():
-        raise IOError("Couldn't open webcam or video")
-
     # Motion detection background subtractor
     motion_subtractor = cv2.createBackgroundSubtractorMOG2(history=10,
                                                            varThreshold=100)
@@ -59,17 +59,14 @@ try:
         return_value, frame = vid.read()
         image = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
         motion_mask = motion_subtractor.apply(image)
-        back_mask = get_background_mask(image, background)
-        foreground_white = get_foreground(image, back_mask)
+        foreground_image = get_foreground(image, background)
 
         # Show stream
         cv2.imshow("Camera Feed", image)
         cv2.moveWindow("Camera Feed", 0, 0)
         cv2.imshow("Movement", motion_mask)
         cv2.moveWindow("Movement", 0, 380)
-        cv2.imshow("Background", back_mask)
-        cv2.moveWindow("Background", 400, 380)
-        cv2.imshow("Foreground", foreground_white)
+        cv2.imshow("Foreground", foreground_image)
         cv2.moveWindow("Foreground", 400, 0)
 
         # Check if object has moved in the last few frames
@@ -87,7 +84,7 @@ try:
 
             # Check for new object and predict
             if state == s["waiting_object"]:
-                preprocessed_image = prepare_image(foreground_white)
+                preprocessed_image = prepare_image(foreground_image)
                 predictions = []
                 # Predict image class
                 for i in range(prediction_iterations):

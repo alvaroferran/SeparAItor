@@ -3,7 +3,7 @@
 import os
 import cv2
 import numpy as np
-from libs.image import prepare_image, get_background_mask, get_foreground
+from libs.image import prepare_image, get_foreground
 
 
 image_size = (256, 256)
@@ -22,15 +22,16 @@ try:
     img_counter = 0
     while True:
         return_value, frame = vid.read()
-        # Resize
+        # Get foreground image of object
         image = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
-        back_mask = get_background_mask(image, background)
-        foreground_white = get_foreground(image, back_mask)
+        foreground_image = get_foreground(image, background)
 
         # Show stream
-        cv2.namedWindow("image", cv2.WINDOW_NORMAL)
-        cv2.imshow("image", image)
-        cv2.imshow("Foreground", foreground_white)
+        cv2.imshow("Camera Feed", image)
+        cv2.moveWindow("Camera Feed", 0, 0)
+        cv2.imshow("Background", background)
+        cv2.moveWindow("Background", 0, 380)
+        cv2.imshow("Foreground", foreground_image)
         cv2.moveWindow("Foreground", 400, 0)
 
         # Read keyboard
@@ -42,7 +43,7 @@ try:
                 os.mkdir(save_dir)
             img_name = "img" + str(img_counter) + ".jpg"
             img_path = os.path.join(save_dir, img_name)
-            cv2.imwrite(img_path, foreground_white)
+            cv2.imwrite(img_path, foreground_image)
             print("Saved ", img_path)
             img_counter += 1
 
