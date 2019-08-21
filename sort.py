@@ -5,36 +5,43 @@ import numpy as np
 from tensorflow.keras.models import load_model
 from libs.serial_comms import connect_serial, send_data
 from libs.image import prepare_image, get_foreground
-from libs.actions import get_most_frequent, detect_motion, sort_item
+from libs.actions import get_most_frequent, sort_item
+from libs.camera import warmup_camera, detect_motion
+from libs.information import Information
 
-
-# Configuration
-save_dir = os.path.join("CNN", "save")
-model_path = os.path.join(save_dir, "Fold0-0.9444.hdf5")
-image_size = (256, 256)
-stabilization_iterations = 10
-prediction_iterations = 3
-
-# Get labels
-train_dir = os.path.join("CNN", os.path.join("dataset", "train"))
-labels = os.listdir(train_dir)
-labels.sort()
-print(labels)
-
-# Input video stream (open early to let the camera warm up while model loads)
-vid = cv2.VideoCapture(0)
-if not vid.isOpened():
-    raise IOError("Couldn't open webcam or video")
-
-# Load trained model
-model = load_model(model_path)
-model.summary()
-
-# Connect to base
-bt = connect_serial('/dev/rfcomm0', 19200)
-print("Connected!")
 
 try:
+    # Configuration
+    save_dir = os.path.join("CNN", "save")
+    model_path = os.path.join(save_dir, "Fold0-0.9948.hdf5")
+    image_size = (256, 256)
+    stabilization_iterations = 10
+    prediction_iterations = 3
+
+    # Get labels
+    train_dir = os.path.join("CNN", os.path.join("dataset", "train"))
+    labels = os.listdir(train_dir)
+    labels.sort()
+
+    # Connect to base
+    print("Waiting for base to connect...", end=" ")
+    bt = connect_serial('/dev/rfcomm0', 19200)
+    print("Done")
+
+    # Load trained model
+    model = load_model(model_path)
+    model.summary()
+    print("Model loaded")
+
+    # Input video stream
+    vid = cv2.VideoCapture(0)
+    if not vid.isOpened():
+        raise IOError("Couldn't open webcam or video")
+
+    print("Waiting for camera to warm up...", end=" ")
+    warmup_camera(vid, 2)
+    print("Done")
+
     # Motion detection background subtractor
     motion_subtractor = cv2.createBackgroundSubtractorMOG2(history=10,
                                                            varThreshold=100)
@@ -49,10 +56,13 @@ try:
         "waiting_base": 1
         }
     state = s["waiting_object"]
-    motion_list = [True] * stabilization_iterations
+    motion_list = [False] * stabilization_iterations
     image_stable = False
-    moved_prev = True
+    moved_prev = False
     waiting_confirmation_base = False
+
+    # Create information screen
+    information = Information()
 
     while True:
         # Get foreground image of object for the prediction
@@ -68,6 +78,8 @@ try:
         cv2.moveWindow("Movement", 0, 380)
         cv2.imshow("Foreground", foreground_image)
         cv2.moveWindow("Foreground", 400, 0)
+        cv2.imshow("Information", information.image)
+        cv2.moveWindow("Information", 400, 380)
 
         # Check if object has moved in the last few frames
         motion_detected = detect_motion(motion_mask, image_size)
@@ -93,13 +105,13 @@ try:
                     predictions.append(preds)
                 prediction = get_most_frequent(predictions)
                 prediction = labels[prediction]
-                print(f"Class: {prediction}")
                 sorted_class = sort_item(prediction)
                 if sorted_class is not None:
                     # Go to corresponding bin
                     send_data(bt, sorted_class)
                     moved_prev = False
                     state = s["waiting_base"]
+                    information.update(prediction)
                 else:
                     print(f"No bin specified for class {prediction}")
 
@@ -115,7 +127,7 @@ try:
                                             interpolation=cv2.INTER_AREA)
                     moved_prev = False
                     state = s["waiting_object"]
-                    print("Ready for new object")
+                    information.update()
 
         # Quit
         if cv2.waitKey(1) & 0xFF == ord('q'):

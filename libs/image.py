@@ -48,13 +48,3 @@ def get_foreground_raw(image, back_mask):
     non_black_pixels = foreground_black > 1
     foreground_white[non_black_pixels] = foreground_black[non_black_pixels]
     return foreground_white
-
-
-# def draw_text(image, text):
-#     font = cv2.FONT_HERSHEY_SIMPLEX
-#     pos = (50, 50)
-#     size = 1
-#     color = (255, 255, 255)
-#     thickness = 3
-#     cv2.putText(image, text, pos, font, size, color, thickness, cv2.LINE_AA)
-#     return image
