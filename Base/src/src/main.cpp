@@ -19,9 +19,9 @@ char in_string[MAX_LEN_IN];
 uint8_t pin_yaw = 8;
 uint8_t pin_tilt = 7;
 Servo yaw, tilt;
-uint8_t tilt_min = 0;
-uint8_t tilt_max = 50;
-uint8_t angles[] = {90, 70, 80, 100, 110}; // Default, PMD, organic, glass, paper
+uint8_t tilt_up = 0;
+uint8_t tilt_down = 50;
+uint8_t default_angle = 90;
 
 
 void setup() {
@@ -37,8 +37,8 @@ void setup() {
     }
     yaw.attach(pin_yaw);
     tilt.attach(pin_tilt);
-    yaw.write(angles[0]);
-    tilt.write(tilt_min);
+    yaw.write(default_angle);
+    tilt.write(tilt_up);
 }
 
 
@@ -64,15 +64,40 @@ int read_string(char * p_string){
 
 
 void go_to_pos(char * p_string){
-    uint8_t bin_selection = (*p_string - '0') +1;
-    uint16_t wait_ms = 1000;
-    yaw.write(angles[bin_selection]);
-    delay(wait_ms);
-    tilt.write(tilt_max);
-    delay(wait_ms);
-    tilt.write(tilt_min);
-    yaw.write(angles[0]);
-    delay(wait_ms);
+    uint8_t angles[] = {5, 45, 90, 135};    // glass, organic, PMC, paper
+    uint8_t bin_selection = (*p_string - '0');
+    static uint8_t prev_yaw_angle = default_angle;
+    uint8_t yaw_angle = angles[bin_selection];
+    int16_t yaw_difference = yaw_angle - prev_yaw_angle;
+    uint8_t wait_angle_yaw = 30;
+    uint8_t wait_angle_tilt = 10;
+    uint16_t wait_tilt = 2000;
+    // Go to new bin 
+    if(yaw_difference>0){
+        for(uint8_t angle=prev_yaw_angle; angle<yaw_angle; angle++){
+            yaw.write(angle);
+            dbg(angle);
+            delay(wait_angle_yaw);
+        }
+    }else if (yaw_difference<0){
+        for(uint8_t angle=prev_yaw_angle; angle>yaw_angle; angle--){
+            yaw.write(angle);
+            dbg(angle);
+            delay(wait_angle_yaw);
+        }
+    }
+    // Drop object
+    for(uint8_t angle=tilt_up; angle<tilt_down; angle++){
+        tilt.write(angle);
+        delay(wait_angle_tilt);
+    }
+    delay(wait_tilt);
+     for(uint8_t angle=tilt_down; angle>tilt_up; angle--){
+        tilt.write(angle);
+        delay(wait_angle_tilt);
+    }
+    delay(wait_tilt);
+    prev_yaw_angle = yaw_angle;
 }
 
 
