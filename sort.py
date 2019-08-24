@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import cv2
+import yaml
 import numpy as np
 from tensorflow.keras.models import load_model
 from libs.serial_comms import connect_serial, send_data
@@ -12,14 +13,19 @@ from libs.information import Information
 
 try:
     # Configuration
-    save_dir = os.path.join("CNN", "save")
+    with open(os.path.join("CNN", "config.yml"), 'r') as ymlfile:
+        params = yaml.load(ymlfile)
+    source_dir = params["source_dir"]
+    save_dir = params["save_dir"]
+    
+    save_dir = os.path.join("CNN", save_dir)
     model_path = os.path.join(save_dir, "Fold0-0.9948.hdf5")
     image_size = (256, 256)
     stabilization_iterations = 10
     prediction_iterations = 3
 
     # Get labels
-    train_dir = os.path.join("CNN", os.path.join("dataset", "train"))
+    train_dir = os.path.join("CNN", source_dir)
     labels = os.listdir(train_dir)
     labels.sort()
 

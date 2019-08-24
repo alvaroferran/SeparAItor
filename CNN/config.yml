@@ -1,5 +1,5 @@
-source_dir: "dataset_256"
-dest_dir: "dataset"
+source_dir: "dataset"
+dest_dir: "dataset_tmp"
 save_dir: "save"
 log_dir: "logs"
 plot_dir: "plots"
