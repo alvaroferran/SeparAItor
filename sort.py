@@ -44,7 +44,7 @@ try:
 
     # Motion detection background subtractor
     motion_subtractor = cv2.createBackgroundSubtractorMOG2(history=10,
-                                                           varThreshold=100)
+                                                           varThreshold=300)
 
     # First frame for background
     _, frame = vid.read()
@@ -56,10 +56,12 @@ try:
         "waiting_base": 1
         }
     state = s["waiting_object"]
+
     motion_list = [False] * stabilization_iterations
     image_stable = False
     moved_prev = False
-    waiting_confirmation_base = False
+    # Stop the motion detector from triggering at beginning
+    motion_mask = motion_subtractor.apply(background)
 
     # Create information screen
     information = Information()
@@ -85,17 +87,16 @@ try:
         motion_detected = detect_motion(motion_mask, image_size)
         motion_list.pop(0)
         motion_list.append(motion_detected)
-        if True not in motion_list:
-            image_stable = True
-        else:
-            image_stable = False
+        if True in motion_list:
             moved_prev = True
+            image_stable = False
+        else:
+            image_stable = True
 
-        # Check for trigger falling edge (wait for image to stabilize)
-        if image_stable and moved_prev:
-
-            # Check for new object and predict
-            if state == s["waiting_object"]:
+        # Check for new object and predict
+        if state == s["waiting_object"]:
+            # Check for trigger falling edge (wait for image to stabilize)
+            if image_stable and moved_prev:
                 preprocessed_image = prepare_image(foreground_image)
                 predictions = []
                 # Predict image class
@@ -109,25 +110,29 @@ try:
                 if sorted_class is not None:
                     # Go to corresponding bin
                     send_data(bt, sorted_class)
-                    moved_prev = False
-                    state = s["waiting_base"]
                     information.update(prediction)
+                    state = s["waiting_base"]
                 else:
                     print(f"No bin specified for class {prediction}")
 
-            # Wait for base to return to position
-            elif state == s["waiting_base"]:
-                in_data = bt.read_until().decode()
-                if in_data[:-2] == "a":
-                    bt.write("b".encode())
-                    waiting_confirmation_base = False
+        # Wait for base to report readiness
+        elif state == s["waiting_base"]:
+            bt.reset_input_buffer()
+            in_data = bt.readline().decode()
+            if len(in_data) > 0:
+                # print(repr(in_data))
+                if in_data[:1] == "c":
+                    bt.write("d".encode())
+                    bt.flush()
+                    state = s["waiting_object"]
+                    information.update()
                     # Refresh background image
                     _, frame = vid.read()
                     background = cv2.resize(frame, image_size,
                                             interpolation=cv2.INTER_AREA)
+                    # Reset motion data
+                    motion_list = [False] * stabilization_iterations
                     moved_prev = False
-                    state = s["waiting_object"]
-                    information.update()
 
         # Quit
         if cv2.waitKey(1) & 0xFF == ord('q'):

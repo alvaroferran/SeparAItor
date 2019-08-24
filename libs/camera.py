@@ -14,7 +14,7 @@ def warmup_camera(video, seconds):
 
 
 def detect_motion(mask, image_size):
-    mask_threshold = 1.e-2
+    mask_threshold = 1.e-3
     img_array = mask.astype(np.uint8)
     white_list = cv2.findNonZero(img_array)
     if white_list is not None:

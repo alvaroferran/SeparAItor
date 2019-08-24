@@ -42,7 +42,7 @@ void setup() {
 }
 
 
-int read_string(char * p_string){
+int read_string(char * p_string, uint8_t max_len){
 	char in_char;
     char end_char = '\n';
     bool received = false;
@@ -54,7 +54,7 @@ int read_string(char * p_string){
     }
     else{
         p_string[chars_received++] = '\0';
-        if(chars_received == MAX_LEN_IN){
+        if(chars_received == max_len){
             received = true;
         }
         chars_received = 0;
@@ -79,23 +79,26 @@ void go_to_pos(char * p_string){
             dbg(angle);
             delay(wait_angle_yaw);
         }
+        yaw.write(yaw_angle);
     }else if (yaw_difference<0){
         for(uint8_t angle=prev_yaw_angle; angle>yaw_angle; angle--){
             yaw.write(angle);
             dbg(angle);
             delay(wait_angle_yaw);
         }
+        yaw.write(yaw_angle);
     }
     // Drop object
-    for(uint8_t angle=tilt_up; angle<tilt_down; angle++){
+    for(uint8_t angle=tilt_up; angle<tilt_down; angle+=10){
         tilt.write(angle);
         delay(wait_angle_tilt);
     }
     delay(wait_tilt);
-     for(uint8_t angle=tilt_down; angle>tilt_up; angle--){
+     for(uint8_t angle=tilt_down; angle>tilt_up; angle-=10){
         tilt.write(angle);
         delay(wait_angle_tilt);
     }
+    tilt.write(tilt_up);
     delay(wait_tilt);
     prev_yaw_angle = yaw_angle;
 }
@@ -105,17 +108,20 @@ void loop() {
     static bool received_new = false;
     
     if(Serial.available()){
-        received_new = read_string(&in_string[0]);
+        received_new = read_string(&in_string[0], MAX_LEN_IN);
     }
 
 	if (received_new == true){
         dbg(in_string);
 		go_to_pos(&in_string[0]);
         while(1){
-            Serial.println("a");
-            char c = Serial.read();
-            if(c == 'b'){
-                break;
+            Serial.println("c");
+            Serial.flush();
+            if(Serial.available()){
+                char c = Serial.read();
+                if(c == 'd'){
+                    break;
+                }
             }
         }
         received_new = false;

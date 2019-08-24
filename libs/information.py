@@ -16,7 +16,7 @@ class Information:
         if result is None:
             self.image[:] = (50, 200, 100)
             text = "System ready"
-            pos = (10, 150)
+            pos = (20, 150)
             cv2.putText(self.image, text, pos, self.font, self.size,
                         self.color, self.thickness, cv2.LINE_AA)
         else:
@@ -30,6 +30,6 @@ class Information:
             cv2.putText(self.image, text, pos, self.font, self.size,
                         self.color, self.thickness, cv2.LINE_AA)
             text = result
-            pos = (10, 200)
+            pos = (120, 150)
             cv2.putText(self.image, text, pos, self.font, self.size,
                         self.color, self.thickness, cv2.LINE_AA)

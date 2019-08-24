@@ -3,11 +3,11 @@ def get_most_frequent(preds):
 
 
 def sort_item(item):
-    PMD = ["plastic", "cans", "cartons"]
+    PMC = ["plastic", "cans", "cartons"]
     organic = ["eggs"]
     glass = ["glass"]
     paper = ["paper"]
-    classes = [PMD, organic, glass, paper]
+    classes = [glass, organic, PMC, paper]
     for class_item in classes:
         if item in class_item:
             return classes.index(class_item)
