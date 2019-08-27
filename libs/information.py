@@ -12,7 +12,7 @@ class Information:
         self.thickness = 2
         self.update()
 
-    def update(self, result=None):
+    def update(self, result=None, confidence=None):
         if result is None:
             self.image[:] = (50, 200, 100)
             text = "System ready"
@@ -31,5 +31,10 @@ class Information:
                         self.color, self.thickness, cv2.LINE_AA)
             text = result
             pos = (120, 150)
+            cv2.putText(self.image, text, pos, self.font, self.size,
+                        self.color, self.thickness, cv2.LINE_AA)
+            confidence *= 100
+            text = f"{confidence:.2f}%"
+            pos = (120, 200)
             cv2.putText(self.image, text, pos, self.font, self.size,
                         self.color, self.thickness, cv2.LINE_AA)

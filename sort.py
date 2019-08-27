@@ -4,6 +4,7 @@ import cv2
 import yaml
 import numpy as np
 from tensorflow.keras.models import load_model
+from tf_explain.core.grad_cam import GradCAM
 from libs.serial_comms import connect_serial, send_data
 from libs.image import prepare_image, get_foreground
 from libs.actions import get_most_frequent, sort_item
@@ -17,9 +18,8 @@ try:
         params = yaml.load(ymlfile)
     source_dir = params["source_dir"]
     save_dir = params["save_dir"]
-    
     save_dir = os.path.join("CNN", save_dir)
-    model_path = os.path.join(save_dir, "Fold0-0.9948.hdf5")
+    model_path = os.path.join(save_dir, "Fold0.hdf5")
     image_size = (256, 256)
     stabilization_iterations = 10
     prediction_iterations = 3
@@ -39,22 +39,22 @@ try:
     model.summary()
     print("Model loaded")
 
-    # Input video stream
+    # Start video stream
     vid = cv2.VideoCapture(0)
     if not vid.isOpened():
         raise IOError("Couldn't open webcam or video")
-
     print("Waiting for camera to warm up...", end=" ")
     warmup_camera(vid, 2)
     print("Done")
 
-    # Motion detection background subtractor
-    motion_subtractor = cv2.createBackgroundSubtractorMOG2(history=10,
-                                                           varThreshold=300)
-
     # First frame for background
     _, frame = vid.read()
     background = cv2.resize(frame, image_size, interpolation=cv2.INTER_AREA)
+
+    # Motion detection background subtractor
+    motion_subtractor = cv2.createBackgroundSubtractorMOG2(history=10,
+                                                           varThreshold=300)
+    motion_mask = motion_subtractor.apply(background)
 
     # Initial state
     s = {
@@ -62,15 +62,16 @@ try:
         "waiting_base": 1
         }
     state = s["waiting_object"]
-
     motion_list = [False] * stabilization_iterations
     image_stable = False
     moved_prev = False
-    # Stop the motion detector from triggering at beginning
-    motion_mask = motion_subtractor.apply(background)
 
     # Create information screen
     information = Information()
+
+    # Create heatmap screen
+    activation_img = np.zeros((256, 256, 3), np.uint8)
+    heatmap = GradCAM()
 
     while True:
         # Get foreground image of object for the prediction
@@ -86,8 +87,10 @@ try:
         cv2.moveWindow("Movement", 0, 380)
         cv2.imshow("Foreground", foreground_image)
         cv2.moveWindow("Foreground", 400, 0)
+        cv2.imshow("Activation Heatmap", activation_img)
+        cv2.moveWindow("Activation Heatmap", 400, 380)
         cv2.imshow("Information", information.image)
-        cv2.moveWindow("Information", 400, 380)
+        cv2.moveWindow("Information", 800, 0) 
 
         # Check if object has moved in the last few frames
         motion_detected = detect_motion(motion_mask, image_size)
@@ -105,18 +108,32 @@ try:
             if image_stable and moved_prev:
                 preprocessed_image = prepare_image(foreground_image)
                 predictions = []
+                confidence_list = []
                 # Predict image class
                 for i in range(prediction_iterations):
                     preds = model.predict(preprocessed_image)
-                    preds = np.argmax(preds[0], axis=0)
-                    predictions.append(preds)
+                    index = np.argmax(preds[0], axis=0)
+                    predictions.append(index)
+                    confidence_list.append(preds)
                 prediction = get_most_frequent(predictions)
-                prediction = labels[prediction]
-                sorted_class = sort_item(prediction)
+                predicted_class = labels[prediction]
+                # Get average confidence of all runs
+                confidence = 0
+                for i in range(prediction_iterations):
+                    confidence += confidence_list[i][0][prediction]
+                confidence /= prediction_iterations
+                sorted_class = sort_item(predicted_class)
+                # Show activation heatmap
+                last_conv_layer = "block5_conv4"
+                data = ([foreground_image], None)
+                activation_img = heatmap.explain(validation_data=data,
+                                                 model=model,
+                                                 layer_name=last_conv_layer,
+                                                 class_index=index)
                 if sorted_class is not None:
                     # Go to corresponding bin
                     send_data(bt, sorted_class)
-                    information.update(prediction)
+                    information.update(predicted_class, confidence)
                     state = s["waiting_base"]
                 else:
                     print(f"No bin specified for class {prediction}")
