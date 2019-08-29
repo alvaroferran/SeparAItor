@@ -64,26 +64,24 @@ int read_string(char * p_string, uint8_t max_len){
 
 
 void go_to_pos(char * p_string){
-    uint8_t angles[] = {5, 45, 90, 135};    // glass, organic, PMC, paper
+    uint8_t angles[] = {0, 45, 90, 135};    // glass, organic, PMC, paper
     uint8_t bin_selection = (*p_string - '0');
-    static uint8_t prev_yaw_angle = default_angle;
     uint8_t yaw_angle = angles[bin_selection];
-    int16_t yaw_difference = yaw_angle - prev_yaw_angle;
+    int16_t yaw_difference = yaw_angle - default_angle;
     uint8_t wait_angle_yaw = 30;
-    uint8_t wait_angle_tilt = 10;
-    uint16_t wait_tilt = 2000;
-    // Go to new bin 
+    uint8_t wait_angle_tilt = 20;
+    uint16_t wait_tilt = 1000;
+    uint16_t wait_stabilization = 1000;
+    // Go to bin 
     if(yaw_difference>0){
-        for(uint8_t angle=prev_yaw_angle; angle<yaw_angle; angle++){
+        for(uint8_t angle=default_angle; angle<yaw_angle; angle++){
             yaw.write(angle);
-            dbg(angle);
             delay(wait_angle_yaw);
         }
-        yaw.write(yaw_angle);
-    }else if (yaw_difference<0){
-        for(uint8_t angle=prev_yaw_angle; angle>yaw_angle; angle--){
+        yaw.write(yaw_angle);   // Resend last value to lock servo in place
+    }else if(yaw_difference<0){
+        for(uint8_t angle=default_angle; angle>yaw_angle; angle--){
             yaw.write(angle);
-            dbg(angle);
             delay(wait_angle_yaw);
         }
         yaw.write(yaw_angle);
@@ -94,13 +92,27 @@ void go_to_pos(char * p_string){
         delay(wait_angle_tilt);
     }
     delay(wait_tilt);
-     for(uint8_t angle=tilt_down; angle>tilt_up; angle-=10){
+    for(uint8_t angle=tilt_down; angle>tilt_up; angle-=10){
         tilt.write(angle);
         delay(wait_angle_tilt);
     }
     tilt.write(tilt_up);
     delay(wait_tilt);
-    prev_yaw_angle = yaw_angle;
+    // Return to default position
+    if(yaw_difference>0){
+        for(uint8_t angle=yaw_angle; angle>default_angle; angle--){
+            yaw.write(angle);
+            delay(wait_angle_yaw);
+        }
+        yaw.write(default_angle);
+    }else if(yaw_difference<0){
+        for(uint8_t angle=yaw_angle; angle<default_angle; angle++){
+            yaw.write(angle);
+            delay(wait_angle_yaw);
+        }
+        yaw.write(default_angle);
+    }
+    delay(wait_stabilization);
 }
 
 
